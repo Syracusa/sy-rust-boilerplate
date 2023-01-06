@@ -1,9 +1,10 @@
 use std::env;
 use std::net::UdpSocket;
 use std::process;
+use std::thread;
+use std::time::Duration;
 
-fn do_server() {
-    println!("Do server!\n");
+fn server_recv_routine() {
     let socket = match UdpSocket::bind("127.0.0.1:44221") {
         Ok(socket) => socket,
         Err(error) => {
@@ -11,6 +12,18 @@ fn do_server() {
             process::exit(1);
         }
     };
+
+    while (true) {
+        let (recvlen, _srcaddr) = socket.recv_from(&mut buf).unwrap();
+        let buf = &buf[..recvlen];
+    
+        println!("== Client recved data==");    
+        hexdump::hexdump(&buf);
+    }
+}
+
+fn do_server() {
+    println!("Do server!\n");
 
     let mut buf = [0; 2000];
     let (recvlen, srcaddr) = socket.recv_from(&mut buf).unwrap();
@@ -23,24 +36,44 @@ fn do_server() {
     socket.send_to(&buf, &srcaddr).unwrap();
 }
 
+fn client_recv_routine() {
+    let socket = UdpSocket::bind("127.0.0.1:44222").unwrap();
+    let mut buf = [0; 2000];
+    while(true) {
+        let (recvlen, _srcaddr) = socket.recv_from(&mut buf).unwrap();
+        let buf = &buf[..recvlen];
+    
+        println!("== Client recved data==");    
+        hexdump::hexdump(&buf);
+    }
+}
+
+fn client_send_routine() {
+    while(true) {
+        let mut buf = [0; 2000];
+        let sendstr = "Hello world!";
+        let sendlen = sendstr.len();
+        
+        let sbuf = &mut buf[..sendlen];
+        sbuf.copy_from_slice(sendstr.as_bytes());
+        socket.send_to(&buf[..sendlen], "127.0.0.1:44221").unwrap();
+        thread::sleep(Duration::from_millis(1000));
+    }
+}
+
 fn do_client() {
     println!("Do client!\n");
-    let socket = UdpSocket::bind("127.0.0.1:44222").unwrap();
-
-    let mut buf = [0; 2000];
-
-    let sendstr = "Hello world!";
-    let sendlen = sendstr.len();
     
-    let sbuf = &mut buf[..sendlen];
-    sbuf.copy_from_slice(sendstr.as_bytes());
-    socket.send_to(&buf[..sendlen], "127.0.0.1:44221").unwrap();
+    thread::spawn(|| {
+        client_recv_routine();
+    });
 
-    let (recvlen, _srcaddr) = socket.recv_from(&mut buf).unwrap();
-    let buf = &buf[..recvlen];
+    thread::spawn(|| {
+        client_send_routine();
+    })
 
-    println!("== Client recved data==");
-    hexdump::hexdump(&buf);
+    /* TBD : Join */
+
 }
 
 fn main() {
